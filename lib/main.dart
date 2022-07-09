@@ -1,5 +1,6 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:remindme/notifications.dart';
 import 'globals.dart';
 
@@ -52,17 +53,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-        future: delay(),
-        builder: (context, snapshot) {
-          if (snapshot.data ?? false) {
-            return const Home();
-          } else {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-        });
+    return const Home();
   }
 }
 
@@ -77,42 +68,59 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
-      if (!isAllowed) {
-        showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-                    title: const Text('Notification'),
-                    content: const Text(
-                        'You have to allow notifications to get notifications'),
-                    actions: [
-                      TextButton(
-                        child: const Text('Allow'),
-                        onPressed: () {
-                          AwesomeNotifications()
-                              .requestPermissionToSendNotifications()
-                              .then((value) => Navigator.pop(context));
-                        },
-                      ),
-                      TextButton(
-                        child: const Text('Don\'t Allow'),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ]));
-      }
-    });
-    AwesomeNotifications().actionStream.listen((event) {
-      ScaffoldMessenger.of(context)
-        ..removeCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Action')));
-
-      Navigator.pushNamed(context, '/third');
-    });
-    AwesomeNotifications().createdStream.listen((event) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Notification created on ${event.channelKey}'),
-      ));
-    });
+    AwesomeNotifications()
+      ..isNotificationAllowed().then((isAllowed) {
+        if (!isAllowed) {
+          showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                      title: const Text('Notification'),
+                      content: const Text(
+                          'You have to allow notifications to get notifications'),
+                      actions: [
+                        TextButton(
+                          child: const Text('Allow'),
+                          onPressed: () {
+                            AwesomeNotifications()
+                                .requestPermissionToSendNotifications()
+                                .then((value) => Navigator.pop(context));
+                          },
+                        ),
+                        TextButton(
+                          child: const Text('Don\'t Allow'),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ]));
+        }
+      })
+      ..dismissedStream.listen(
+        (event) {
+          AwesomeNotifications().decrementGlobalBadgeCounter();
+          print(event);
+        },
+      )
+      ..actionStream.listen((event) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('Action')));
+        AwesomeNotifications().decrementGlobalBadgeCounter();
+        FlutterRingtonePlayer.play(
+                android: AndroidSounds.ringtone, ios: IosSounds.alarm);
+        if (event.buttonKeyPressed == '1') {
+          FlutterRingtonePlayer.stop();
+          showSnackBar('paused', context);
+        }
+      })
+      ..createdStream.listen((event) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Notification created on ${event.channelKey}'),
+        ));
+      })
+      ..displayedStream.listen((event) {
+         FlutterRingtonePlayer.play(
+                android: AndroidSounds.ringtone, ios: IosSounds.alarm);
+        print('displayed');
+      });
 
     WidgetsBinding.instance.addObserver(this);
   }
@@ -130,9 +138,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    AwesomeNotifications().actionSink.close();
-    AwesomeNotifications().createdSink.close();
-    AwesomeNotifications().dispose();
+    AwesomeNotifications()
+      ..actionSink.close()
+      ..createdSink.close()
+      ..dismissedSink.close()
+      ..displayedSink.close()
+      ..dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -145,18 +156,28 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
+            const TextButton(
+                onPressed: createImmediateNotification, child: Text('play')),
             TextButton(
-                onPressed: () => Navigator.pushNamed(context, '/second'),
-                child: const Text('Second')),
+                onPressed: onRepeatButtonPressed, child: const Text('Repeat')),
             const TextButton(
                 onPressed: clearNotifications,
                 child: Text('clear notifications')),
-            const TextButton(
-                onPressed: createRepeatNotification, child: Text('Notify')),
+            TextButton(
+                onPressed: () => createScheduledNotification(context),
+                child: const Text('Notify')),
           ],
         ),
       ),
     );
+  }
+
+  void onRepeatButtonPressed() async {
+    final timeofDay = await showDialog(
+        context: context,
+        builder: (_) => TimePickerDialog(
+              initialTime: TimeOfDay.now(),
+            ));
   }
 }
 

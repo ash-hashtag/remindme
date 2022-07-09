@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.2
   awesome_notifications: ^0.6.21
   google_maps_flutter: ^2.0.10
+  flutter_ringtone_player: ^3.2.0
 
 dev_dependencies:
   flutter_test:
